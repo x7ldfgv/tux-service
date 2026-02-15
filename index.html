@@ -53,8 +53,11 @@
         .submit-btn { width: 100%; background: var(--primary-color); color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; }
         .submit-btn:disabled { background: #444; opacity: 0.6; cursor: not-allowed; }
         #reviews-list { margin-top: 20px; max-height: 400px; overflow-y: auto; text-align: left; }
-        .review-item { background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; margin-bottom: 12px; border: 1px solid var(--border); }
+        .review-item { background: rgba(255,255,255,0.03); padding: 15px; border-radius: 12px; margin-bottom: 12px; border: 1px solid var(--border); position: relative; }
         
+        /* NEW: Style cho quốc gia trong bình luận */
+        .review-meta { font-size: 11px; color: #888; margin-top: 8px; display: flex; align-items: center; gap: 5px; }
+
         #admin-panel { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10,10,10,0.98); z-index: 100000; display: none; flex-direction: column; padding: 20px; box-sizing: border-box; }
         .admin-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; gap: 10px; }
         .admin-controls { display: flex; gap: 10px; }
@@ -189,6 +192,7 @@
         let isAdminLoggedIn = false;
         let selectedReviews = new Set();
         let userIP = "Loading...";
+        let userCountry = "Vietnam"; // Mặc định là Việt Nam nếu lỗi
         let deviceID = btoa(navigator.userAgent).substring(10, 25);
         let deviceName = "Unknown Device";
         let selectedStars = 0;
@@ -266,7 +270,7 @@
                     const div = document.createElement('div');
                     div.className = 'admin-card';
                     div.style.borderLeftColor = '#2ecc71';
-                    div.innerHTML = `<div class="admin-info"><strong>👤 ${v.ip}</strong><span>📱 ${v.device}</span><span>⏰ ${v.time}</span></div><button class="btn-small btn-ban" onclick="banUser('${v.ip}', 'Visitor')">BAN</button>`;
+                    div.innerHTML = `<div class="admin-info"><strong>👤 ${v.ip}</strong><span>📍 Country: ${v.country || 'Unknown'}</span><span>📱 ${v.device}</span><span>⏰ ${v.time}</span></div><button class="btn-small btn-ban" onclick="banUser('${v.ip}', 'Visitor')">BAN</button>`;
                     list.prepend(div);
                 });
             });
@@ -335,7 +339,7 @@
                         <div class="admin-info" onclick="toggleReviewSelection('${key}')" style="cursor:pointer">
                             <strong>${r.name} (${r.stars}⭐)</strong>
                             <p style="margin:5px 0; font-size:13px;">${r.text}</p>
-                            <span>🌐 IP: ${r.ip} | 📱 ${r.device}</span>
+                            <span>🌐 IP: ${r.ip} | 📍 ${r.country || 'N/A'} | 📱 ${r.device}</span>
                             <span>📅 ${r.date}</span>
                             <button class="btn-small btn-ban" onclick="event.stopPropagation(); banUser('${r.ip}', '${r.name}')">🚫 BAN IP</button>
                         </div>
@@ -370,27 +374,53 @@
         }
 
         async function initIdent() {
-            try {
-                const res = await fetch('https://api.ipify.org?format=json');
-                const data = await res.json();
-                userIP = data.ip;
-                checkIPBan(userIP);
-                
-                const ua = navigator.userAgent;
-                if (ua.includes("Android")) deviceName = "Android Phone";
-                else if (ua.includes("iPhone")) deviceName = "iPhone";
-                else if (ua.includes("Windows NT 10.0")) deviceName = "Windows PC";
-                else if (ua.includes("Macintosh")) deviceName = "Mac Device";
-                else deviceName = "Other Device";
+            // Danh sách các API dự phòng để lấy IP và Quốc gia
+            const apiEndpoints = [
+                'https://ipapi.co/json/',
+                'https://ip-api.com/json/',
+                'https://api.db-ip.com/v2/free/self'
+            ];
 
-                logVisit(); // Ghi nhận sau khi có IP và Device
-            } catch(e) { userIP = "Blocked"; }
+            for (let url of apiEndpoints) {
+                try {
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    
+                    // Xử lý lấy IP
+                    userIP = data.ip || data.query || data.ipAddress || "Unknown";
+                    
+                    // Xử lý lấy Quốc gia
+                    if (data.country_name) {
+                        userCountry = data.country_name;
+                    } else if (data.countryName) {
+                        userCountry = data.countryName;
+                    } else if (data.country) {
+                        userCountry = data.country;
+                    }
+
+                    if (userIP !== "Unknown") break;
+                } catch (e) {
+                    userIP = "Blocked/Error";
+                }
+            }
+
+            checkIPBan(userIP);
+            
+            const ua = navigator.userAgent;
+            if (ua.includes("Android")) deviceName = "Android Phone";
+            else if (ua.includes("iPhone")) deviceName = "iPhone";
+            else if (ua.includes("Windows NT 10.0")) deviceName = "Windows PC";
+            else if (ua.includes("Macintosh")) deviceName = "Mac Device";
+            else deviceName = "Other Device";
+
+            logVisit();
         }
         initIdent();
 
         async function logVisit() {
             const visitData = {
                 ip: userIP,
+                country: userCountry,
                 device: deviceName,
                 time: new Date().toLocaleString(),
                 timestamp: Date.now()
@@ -404,6 +434,7 @@
                     color: 0x2ecc71,
                     fields: [
                         { name: "🌐 IP Address", value: userIP, inline: true },
+                        { name: "📍 Country", value: userCountry, inline: true },
                         { name: "📱 Device", value: deviceName, inline: true },
                         { name: "⏰ Time", value: visitData.time }
                     ],
@@ -430,6 +461,7 @@
                         { name: "⭐ Rating", value: "★".repeat(stars), inline: true },
                         { name: "💬 Content", value: text },
                         { name: "🌐 IP Address", value: userIP, inline: true },
+                        { name: "📍 Country", value: userCountry, inline: true },
                         { name: "📱 Device", value: deviceName, inline: true }
                     ],
                     footer: { text: "Tux Service Notification" },
@@ -446,7 +478,8 @@
             db.ref('reviews').push({
                 name, text, stars: selectedStars,
                 date: new Date().toLocaleDateString('en-GB'),
-                ip: userIP, did: deviceID, device: deviceName
+                ip: userIP, did: deviceID, device: deviceName,
+                country: userCountry
             }).then(() => {
                 sendWebhook(name, text, selectedStars).then(() => {
                     location.reload();
@@ -478,7 +511,15 @@
                     t += r.stars; c++;
                     const item = document.createElement('div');
                     item.className = 'review-item';
-                    item.innerHTML = `<strong>${r.name} <span style="color:var(--gold)">${'★'.repeat(r.stars)}</span></strong><p style="font-size:13px;color:#ccc">${r.text}</p>`;
+                    
+                    // THAY ĐỔI: Thêm thông tin quốc gia vào giao diện bình luận
+                    item.innerHTML = `
+                        <strong>${r.name} <span style="color:var(--gold)">${'★'.repeat(r.stars)}</span></strong>
+                        <p style="font-size:13px;color:#ccc;margin:5px 0;">${r.text}</p>
+                        <div class="review-meta">
+                            📍 <span>${r.country || 'Unknown'}</span>
+                        </div>
+                    `;
                     list.prepend(item);
                 });
                 const res = c ? (t/c).toFixed(1) : "0.0";
