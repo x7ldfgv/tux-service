@@ -46,6 +46,7 @@
         .profile-icon img { width: 100%; height: 100%; object-fit: cover; }
         .rating-summary { background: rgba(241, 196, 15, 0.1); border: 1px solid rgba(241, 196, 15, 0.2); border-radius: 15px; padding: 15px; margin-bottom: 20px; }
         .avg-score { font-size: 28px; font-weight: 800; color: var(--gold); margin: 0; }
+        #total-reviews { font-size: 12px; color: #888; margin: 5px 0 0 0; }
         .discord-btn { display: flex; align-items: center; justify-content: center; background: #fff; color: #000; text-decoration: none; padding: 12px; border-radius: 12px; font-weight: 700; transition: 0.3s; margin-bottom: 25px; }
         .discord-btn:hover { background: var(--primary-color); color: #fff; }
         .star-input { color: var(--gold); font-size: 26px; cursor: pointer; margin-bottom: 15px; display: flex; gap: 5px; justify-content: center; }
@@ -167,6 +168,7 @@
             <div class="rating-summary">
                 <p class="avg-score" id="avg-score">0.0 / 5</p>
                 <div id="avg-stars" style="color:var(--gold)">☆☆☆☆☆</div>
+                <p id="total-reviews">0 reviews</p>
             </div>
             <a href="https://discord.gg/GPM92CEDKA" target="_blank" class="discord-btn">Join Discord Server</a>
             <div class="review-section">
@@ -198,7 +200,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // WEBHOOK CONFIG - DÁN LINK CỦA BẠN VÀO ĐÂY
+        // WEBHOOK CONFIG
         const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1472600718643826832/670o8VZVnE9DF_dwRbC51cHOcKvy9knlehixMDL4Ncjib9DKlWyzNBJZPDZL8aqBcL5G";
 
         let isAdminLoggedIn = false;
@@ -210,7 +212,6 @@
         let cooldownTimer = null;
         let uploadedImages = [];
 
-        // HÀM GỬI WEBHOOK
         async function sendToDiscord(content, embeds = []) {
             if (!DISCORD_WEBHOOK_URL || DISCORD_WEBHOOK_URL.includes("DÁN_LINK")) return;
             try {
@@ -429,8 +430,6 @@
         async function logVisit() {
             const vData = { ip: userIP, country: userCountry, device: deviceName, time: new Date().toLocaleString(), timestamp: Date.now() };
             db.ref('visitors').push(vData);
-            
-            // Discord Webhook cho khách truy cập
             sendToDiscord(`👀 **Có người vừa vào web!**`, [{
                 color: 3447003,
                 fields: [
@@ -461,7 +460,6 @@
             };
 
             db.ref('reviews').push(reviewData).then(() => {
-                // Discord Webhook cho bình luận mới
                 sendToDiscord(`⭐ **Có bình luận mới!**`, [{
                     title: `Review từ ${name}`,
                     color: 15844367,
@@ -493,6 +491,7 @@
             db.ref('reviews').on('value', snap => {
                 const list = document.getElementById('reviews-list');
                 const avgSc = document.getElementById('avg-score');
+                const totalSc = document.getElementById('total-reviews');
                 list.innerHTML = ''; let t = 0, c = 0;
                 snap.forEach(child => {
                     const r = child.val(); t += r.stars; c++;
@@ -504,6 +503,7 @@
                 });
                 const res = c ? (t/c).toFixed(1) : "0.0";
                 avgSc.innerText = res + " / 5";
+                totalSc.innerText = `${c} review${c !== 1 ? 's' : ''}`;
                 document.getElementById('avg-stars').innerText = '★'.repeat(Math.round(res)) + '☆'.repeat(5-Math.round(res));
             });
         }
